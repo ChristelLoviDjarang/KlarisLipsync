@@ -1,10 +1,13 @@
+// Impor dependensi yang diperlukan dari React dan library lainnya
 import React, { useRef, useEffect, useState, useMemo } from "react";
 import { useFrame, useLoader } from "@react-three/fiber";
 import { useGLTF, useAnimations } from "@react-three/drei";
 import { useFBX } from "@react-three/drei";
-import { useControls } from "leva"; // Import useControls dari Leva
+import { useControls } from "leva";
 import * as THREE from "three";
+import { useSpring, animated } from "@react-spring/three";
 
+// Mendefinisikan pemetaan untuk nilai viseme (bentuk mulut)
 const corresponding = {
   A: "viseme_PP",
   B: "viseme_kk",
@@ -17,8 +20,9 @@ const corresponding = {
   X: "viseme_PP",
 };
 
+// Mendefinisikan komponen Avatar
 export function Avatar(props) {
-  // Menggunakan useControls dari Leva untuk kontrol GUI
+  // Menggunakan kontrol Leva untuk mengelola pemutaran dan pemilihan skrip
   const { playAudio, script } = useControls({
     playAudio: true,
     script: {
@@ -27,124 +31,28 @@ export function Avatar(props) {
     },
   });
 
-  // Audio handler untuk memutar file audio berdasarkan pilihan
+  // Membuat objek audio untuk skrip yang dipilih
   const audio = useMemo(() => {
-    const newAudio = new Audio(`/audios/${script}.ogg`);
-    return newAudio;
+    return new Audio(`/audios/${script}.ogg`);
   }, [script]);
 
-  // Load lipsync JSON
+  // Memuat dan mengurai data lipsync untuk skrip yang dipilih
   const jsonFile = useLoader(THREE.FileLoader, `/audios/${script}.json`);
   const lipsync = JSON.parse(jsonFile);
 
-  // Memperbarui animasi berdasarkan waktu audio
-  useFrame(() => {
-    const currentAudioTime = audio.currentTime;
-    // if (audio.paused || audio.ended) {
-    //   setAnimation("Waving");
-    // }
-
-    Object.values(corresponding).forEach((value) => {
-      nodes.Wolf3D_Head.morphTargetInfluences[
-        nodes.Wolf3D_Head.morphTargetDictionary[value]
-      ] = 0;
-      nodes.Wolf3D_Teeth.morphTargetInfluences[
-        nodes.Wolf3D_Teeth.morphTargetDictionary[value]
-      ] = 0;
-    });
-
-    for (let i = 0; i < lipsync.mouthCues.length; i++) {
-      const mouthCues = lipsync.mouthCues[i]; // Gunakan mouthCues di sini
-      if (
-        currentAudioTime >= mouthCues.start && // Ganti mouthCue ke mouthCues
-        currentAudioTime <= mouthCues.end // Ganti mouthCue ke mouthCues
-      ) {
-        console.log(mouthCues.value); // Ganti mouthCue ke mouthCues
-        nodes.Wolf3D_Head.morphTargetInfluences[
-          nodes.Wolf3D_Head.morphTargetDictionary[
-            corresponding[mouthCues.value]
-          ]
-        ] = 0.5;
-        nodes.Wolf3D_Teeth.morphTargetInfluences[
-          nodes.Wolf3D_Teeth.morphTargetDictionary[
-            corresponding[mouthCues.value]
-          ]
-        ] = 0.5;
-        break;
-      }
-    }
-  });
-
-  useEffect(() => {
-    if (!audio) return; // Pastikan audio tidak null
-
-    const handleCanPlayThrough = () => {
-      if (playAudio) {
-        audio
-          .play()
-          .then(() => {
-            if (script === "greeting") {
-              setAnimation("Waving");
-            } else {
-              setAnimation("Talking");
-            }
-          })
-          .catch((err) => console.error("Audio playback failed", err));
-      } else {
-        setAnimation("Idle");
-      }
-    };
-
-    audio.addEventListener("canplaythrough", handleCanPlayThrough);
-
-    return () => {
-      audio.removeEventListener("canplaythrough", handleCanPlayThrough);
-      if (audio) {
-        audio.pause();
-        audio.currentTime = 0; // Reset to start
-      }
-    };
-  }, [playAudio, audio, script]);
-
-  // useEffect(() => {
-  //   const handleCanPlayThrough = () => {
-  //     if (playAudio) {
-  //       audio
-  //         .play()
-  //         .catch((err) => console.error("Audio playback failed", err));
-  //         if (script === "greeting") {
-  //           setAnimation("Waving");
-  //         }
-  //     } else {
-  //       setAnimation("Talking");
-  //     }
-  //   };
-
-  //   audio.addEventListener("canplaythrough", handleCanPlayThrough);
-
-  //   return () => {
-  //     audio.removeEventListener("canplaythrough", handleCanPlayThrough);
-  //     audio.pause();
-  //     audio.currentTime = 0; // Reset to start
-  //   };
-  // }, [playAudio, audio, script]);
-
-  // Mengambil model GLTF
+  // Membuat referensi untuk grup model 3D
   const group = useRef();
-  const { nodes, materials } = useGLTF("/models/66ea716fe71d59d70009b73e.glb");
+  // Memuat model 3D (file GLB)
+  const { nodes, materials } = useGLTF("/models/66de6b33bb9d79984d437c2f.glb");
 
-  // Log nodes dan materials untuk debugging
-  console.log("Nodes:", nodes);
-  console.log("Materials:", materials);
-
-  // Mengambil animasi FBX
-  const { animations: idleAnimations } = useFBX("/animations/Idle.fbx");
+  // Memuat file animasi
+  const { animations: standardAnimations } = useFBX("/animations/Standard.fbx");
   const { animations: talkingAnimations } = useFBX("/animations/Talking.fbx");
   const { animations: wavingAnimations } = useFBX("/animations/Waving.fbx");
 
-  // Memastikan animasi ada dan memberikan nama
-  if (talkingAnimations.length > 0) {
-    talkingAnimations[0].name = "Idle";
+  // Mengganti nama animasi untuk referensi yang lebih mudah
+  if (standardAnimations.length > 0) {
+    standardAnimations[0].name = "Standard";
   }
   if (talkingAnimations.length > 0) {
     talkingAnimations[0].name = "Talking";
@@ -153,17 +61,26 @@ export function Avatar(props) {
     wavingAnimations[0].name = "Waving";
   }
 
-  const [animation, setAnimation] = useState("Idle");
+  // State untuk animasi saat ini dan visibilitas
+  const [animation, setAnimation] = useState("Standard");
+  const [isVisible, setIsVisible] = useState(false);
 
-  // Menggabungkan animasi dan mengontrol mereka dengan useAnimations
+  // Membuat animasi spring untuk posisi avatar
+  const spring = useSpring({
+    position: isVisible ? [0, 0, 0] : [0, -1, 0],
+    config: { mass: 1, tension: 280, friction: 60 },
+  });
+
+  // Menyiapkan aksi animasi
   const { actions } = useAnimations(
-    [...talkingAnimations, ...wavingAnimations, ...idleAnimations],
+    [...talkingAnimations, ...wavingAnimations, ...standardAnimations],
     group
   );
 
+  // Efek untuk menangani perubahan animasi
   useEffect(() => {
     if (actions && actions[animation]) {
-      actions[animation].reset().fadeIn(0.4).play();
+      actions[animation].reset().fadeIn(0.0).play();
       return () => {
         if (actions[animation]) {
           actions[animation].fadeOut(0.5);
@@ -172,12 +89,84 @@ export function Avatar(props) {
     }
   }, [animation, actions]);
 
-  // Render model dengan skinnedMesh dan pastikan model memiliki skala yang benar
+  // Fungsi update frame untuk sinkronisasi bibir
+  useFrame(() => {
+    const currentAudioTime = audio.currentTime;
+
+    // Mengatur ulang semua pengaruh target morph
+    Object.values(corresponding).forEach((value) => {
+      if (nodes.Wolf3D_Head.morphTargetDictionary[value] !== undefined) {
+        nodes.Wolf3D_Head.morphTargetInfluences[
+          nodes.Wolf3D_Head.morphTargetDictionary[value]
+        ] = 0;
+      }
+      if (nodes.Wolf3D_Teeth.morphTargetDictionary[value] !== undefined) {
+        nodes.Wolf3D_Teeth.morphTargetInfluences[
+          nodes.Wolf3D_Teeth.morphTargetDictionary[value]
+        ] = 0;
+      }
+    });
+
+    // Menerapkan target morph lipsync berdasarkan waktu audio saat ini
+    for (let i = 0; i < lipsync.mouthCues.length; i++) {
+      const mouthCues = lipsync.mouthCues[i];
+      if (
+        currentAudioTime >= mouthCues.start &&
+        currentAudioTime <= mouthCues.end
+      ) {
+        const viseme = corresponding[mouthCues.value];
+        if (nodes.Wolf3D_Head.morphTargetDictionary[viseme] !== undefined) {
+          nodes.Wolf3D_Head.morphTargetInfluences[
+            nodes.Wolf3D_Head.morphTargetDictionary[viseme]
+          ] = 0.5;
+        }
+        if (nodes.Wolf3D_Teeth.morphTargetDictionary[viseme] !== undefined) {
+          nodes.Wolf3D_Teeth.morphTargetInfluences[
+            nodes.Wolf3D_Teeth.morphTargetDictionary[viseme]
+          ] = 0.5;
+        }
+        break;
+      }
+    }
+
+    // Mengatur animasi karakter ke "Standard" ketika audio dijeda atau berakhir
+    if (audio.paused || audio.ended) {
+      setAnimation("Standard");
+    }
+  });
+
+  // Efek untuk menangani pemutaran audio dan animasi
+  useEffect(() => {
+    const handleCanPlayThrough = () => {
+      if (playAudio) {
+        setIsVisible(true);
+        audio
+          .play()
+          .then(() => {
+            setAnimation("Talking");
+          })
+          .catch((err) => console.error("Pemutaran audio gagal", err));
+      } else {
+        setAnimation("Standard");
+      }
+    };
+
+    audio.addEventListener("canplaythrough", handleCanPlayThrough);
+
+    return () => {
+      audio.removeEventListener("canplaythrough", handleCanPlayThrough);
+      audio.pause();
+      audio.currentTime = 0;
+      setIsVisible(false);
+    };
+  }, [playAudio, audio, script]);
+
+  // Merender model 3D dengan animasi dan target morph
   return (
-    <group
+    <animated.group
       ref={group}
       scale={[1, 1, 1]}
-      position={[0, 0, 0]}
+      position={spring.position}
       {...props}
       dispose={null}
     >
@@ -215,32 +204,38 @@ export function Avatar(props) {
         morphTargetInfluences={nodes.Wolf3D_Teeth.morphTargetInfluences}
       />
       <skinnedMesh
+        name="Wolf3D_Hair"
         geometry={nodes.Wolf3D_Hair.geometry}
         material={materials.Wolf3D_Hair}
         skeleton={nodes.Wolf3D_Hair.skeleton}
       />
       <skinnedMesh
+        name="Wolf3D_Body"
         geometry={nodes.Wolf3D_Body.geometry}
         material={materials.Wolf3D_Body}
         skeleton={nodes.Wolf3D_Body.skeleton}
       />
       <skinnedMesh
+        name="Wolf3D_Outfit_Bottom"
         geometry={nodes.Wolf3D_Outfit_Bottom.geometry}
         material={materials.Wolf3D_Outfit_Bottom}
         skeleton={nodes.Wolf3D_Outfit_Bottom.skeleton}
       />
       <skinnedMesh
+        name="Wolf3D_Outfit_Footwear"
         geometry={nodes.Wolf3D_Outfit_Footwear.geometry}
         material={materials.Wolf3D_Outfit_Footwear}
         skeleton={nodes.Wolf3D_Outfit_Footwear.skeleton}
       />
       <skinnedMesh
+        name="Wolf3D_Outfit_Top"
         geometry={nodes.Wolf3D_Outfit_Top.geometry}
         material={materials.Wolf3D_Outfit_Top}
         skeleton={nodes.Wolf3D_Outfit_Top.skeleton}
       />
-    </group>
+    </animated.group>
   );
 }
 
-useGLTF.preload("/models/66ea716fe71d59d70009b73e.glb");
+// Pramuat model 3D untuk meningkatkan kinerja
+useGLTF.preload("/models/66de6b33bb9d79984d437c2f.glb");
